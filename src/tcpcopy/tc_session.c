@@ -719,6 +719,7 @@ send_faked_ack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, bool active)
     } else {
         f_tcp->seq = tcp->ack_seq;
     }
+    tc_log_debug2(LOG_DEBUG, 0, "EX: send faked ack --> port:%u, fake seq:%u, fake ack_seq:%u", ntohs(s->src_port), f_tcp->seq);
 
     s->frame = frame;
     s->cur_pack.cont_len = 0;
@@ -1472,8 +1473,7 @@ proc_bak_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
                 if (s->sm.record_req_hop_seq) {
                     if (before(s->rep_ack_seq, s->req_hop_seq)) {
-                        tc_log_debug1(LOG_NOTICE, 0, "recv rep after hop:%u",
-                                ntohs(s->src_port));
+                        tc_log_debug1(LOG_NOTICE, 0, "recv rep after hop:%u", ntohs(s->src_port));
                         s->sm.rcv_rep_af_hop = 1;
                     }
                 }
@@ -1788,13 +1788,14 @@ continue_diag(tc_sess_t *s, tc_tcph_t *tcp)
         return PACK_CONTINUE;
     }
 
+    tc_log_debug3(LOG_DEBUG, 0, "EX: p:%u, con_ack_seq=%u, con_cur_ack_seq=%u", ntohs(s->src_port), s->req_con_ack_seq, s->req_con_cur_ack_seq);
     if (s->req_con_ack_seq != s->req_con_cur_ack_seq) {
         s->cur_pack.new_req_flag = 1;
         tc_log_debug1(LOG_DEBUG, 0, "a new req,p:%u", ntohs(s->src_port));
 
         if (after(s->cur_pack.seq, s->req_con_snd_seq)) {
             //TODO: 打印出停止的seq、ack
-            tc_log_debug1(LOG_DEBUG, 0, "stop req,p:%u, seq=%u,ack=%u", ntohs(s->src_port), seq, ack_seq);
+            tc_log_debug4(LOG_DEBUG, 0, "stop req,p:%u, seq=%u,ack=%u,cur_pack.seq=%u", ntohs(s->src_port), seq, ack_seq,ntohs(s->cur_pack.seq));
             return PACK_STOP;
         }
     }
@@ -2045,6 +2046,13 @@ proc_clt_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             return PACK_STOP;
         }
 
+        if (!s->cur_pack.new_req_flag) {
+            status = is_continuous_pack(s, ip, tcp);
+            if (status != PACK_CONTINUE) {
+                return status;
+            }
+        }
+
         s->cur_pack.new_req_flag = 0;
         /*seq 乱序，直接PACK_STOP*/
         if (s->sm.candidate_rep_wait) {
@@ -2059,12 +2067,12 @@ proc_clt_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             return status;
         }
 
-        if (!s->cur_pack.new_req_flag) {
-            status = is_continuous_pack(s, ip, tcp);
-            if (status != PACK_CONTINUE) {
-                return status;
-            }
-        }
+        // if (!s->cur_pack.new_req_flag) {
+        //     status = is_continuous_pack(s, ip, tcp);
+        //     if (status != PACK_CONTINUE) {
+        //         return status;
+        //     }
+        // }
 
         tc_log_debug1(LOG_INFO, 0, "new req from clt:%u", ntohs(s->src_port));
     }
@@ -2506,6 +2514,11 @@ sess_add(uint64_t key, tc_iph_t *ip, tc_tcph_t *tcp)
 
     s = sess_create(ip, tcp);
     if (s != NULL) {
+        #if(TC_DEBUG)
+            s->clt_empty_pack_num = 0;
+            s->drop_clt_empty_pack_num = 0;
+        #endif
+
         s->hash_key = key;
         if (!hash_add(sess_table, s->pool, key, s)) {
             tc_log_info(LOG_ERR, 0, "session item already exist");

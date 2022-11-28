@@ -129,6 +129,9 @@ struct tc_sess_s {
     uint32_t rep_seq;
 #if (TC_DEBUG)
     uint32_t rep_ack_seq_bf_fin;
+    //空包统计
+    int clt_empty_pack_num;
+    int drop_clt_empty_pack_num;
 #endif
 
     /* hash key for this session */
