@@ -350,6 +350,7 @@ replicate_packs(tc_iph_t *ip, tc_tcph_t *tcp, int replica_num)
 
 static unsigned char pack_buffer2[IP_RCV_BUF_SIZE];
 
+/*接受raw packet，然后处理包，p_valid_flag初始null*/
 static int
 dispose_packet(unsigned char *packet, int ip_rcv_len, int *p_valid_flag)
 {
@@ -368,14 +369,16 @@ dispose_packet(unsigned char *packet, int ip_rcv_len, int *p_valid_flag)
     }
 
     ip   = (tc_iph_t *) packet;
+    /*简单检查包是否符合tcp协议*/
     if (tc_check_ingress_pack_needed(ip)) {
 
-        replica_num = clt_settings.replica_num;
+        replica_num = clt_settings.replica_num; // 单机未设置replica_num，默认为0，即使用当前ip包
         size_ip     = ip->ihl << 2;
         tcp  = (tc_tcph_t *) ((char *) ip + size_ip);
 
+        // mtu：Maximum Transmission Unit，用来通知对方所能接受数据服务单元的最大尺寸，说明发送方能够接受的有效载荷大小
         if (ip_rcv_len <= clt_settings.mtu) {
-            packet_valid = tc_proc_ingress(ip, tcp);
+            packet_valid = tc_proc_ingress(ip, tcp); // 功能：检查是否是mysql第一个携带命令执行包
             if (replica_num > 1) {
                 replicate_packs(ip, tcp, replica_num);
             }

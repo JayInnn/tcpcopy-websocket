@@ -44,6 +44,7 @@ reconstruct_sess(tc_sess_t *s)
 }
 
 
+/*session 后处理，主要释放session相关资源*/
 static void
 sess_post_disp(tc_sess_t *s,  bool complete)
 {
@@ -1775,8 +1776,13 @@ proc_clt_fin(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
 
 static inline int 
-continue_diag(tc_sess_t *s)
+continue_diag(tc_sess_t *s, tc_tcph_t *tcp)
 {
+    unsigned int    seq, ack_seq;
+
+    seq = ntohl(tcp->seq);
+    ack_seq = ntohl(tcp->ack_seq);
+
     if (clt_settings.not_wait_resp) {
         s->sm.candidate_rep_wait = 0;
         return PACK_CONTINUE;
@@ -1787,7 +1793,8 @@ continue_diag(tc_sess_t *s)
         tc_log_debug1(LOG_DEBUG, 0, "a new req,p:%u", ntohs(s->src_port));
 
         if (after(s->cur_pack.seq, s->req_con_snd_seq)) {
-            tc_log_debug1(LOG_DEBUG, 0, "stop req,p:%u", ntohs(s->src_port));
+            //TODO: 打印出停止的seq、ack
+            tc_log_debug1(LOG_DEBUG, 0, "stop req,p:%u, seq=%u,ack=%u", ntohs(s->src_port), seq, ack_seq);
             return PACK_STOP;
         }
     }
@@ -2039,8 +2046,9 @@ proc_clt_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         }
 
         s->cur_pack.new_req_flag = 0;
+        /*seq 乱序，直接PACK_STOP*/
         if (s->sm.candidate_rep_wait) {
-            status = continue_diag(s);
+            status = continue_diag(s, tcp);
             if (status != PACK_CONTINUE) {
                 return status;
             }
@@ -2345,7 +2353,7 @@ proc_clt_pack_from_buffer(tc_sess_t *s)
         size_ip    = ip->ihl << 2;
         tcp = (tc_tcph_t *) ((char *) ip + size_ip);
         s->cur_pack.cont_len = 0;
-
+        /*分类型处理fin、syn、rst、ack包*/
         status = proc_clt_pack(s, ip, tcp);
 
         if (status == PACK_STOP) {
@@ -2374,7 +2382,7 @@ proc_clt_pack_from_buffer(tc_sess_t *s)
     return pack_sent;
 }
 
-
+/*检查包的有效性*/
 bool
 tc_proc_ingress(tc_iph_t *ip, tc_tcph_t *tcp)
 {
@@ -2425,6 +2433,7 @@ tc_proc_ingress(tc_iph_t *ip, tc_tcph_t *tcp)
         } else {
             if (TCP_PAYLOAD_LENGTH(ip, tcp) > 0) {
 #if (TC_PLUGIN)
+                /*超时处理：check_padding校验是否开启一个新session*/
                 if (clt_settings.plugin && clt_settings.plugin->check_padding)
                 {
                     if (!clt_settings.plugin->check_padding(ip, tcp)) {
@@ -2471,6 +2480,7 @@ tc_proc_ingress(tc_iph_t *ip, tc_tcph_t *tcp)
             }
         } 
 
+        /*sync 三次握手开始， sess_add新增session*/
         s = sess_add(key, ip, tcp);
         if (s == NULL) {
             return false;
