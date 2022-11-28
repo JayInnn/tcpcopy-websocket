@@ -9,6 +9,10 @@ static uint64_t       accumulated_diff = 0, adj_v_pack_df = 0;
 static struct timeval first_pack_time, last_v_pack_time,
                       last_pack_time, base_time, cur_time;
 
+//Extra addition
+static unsigned char *unsend_pkt_data = NULL;
+struct pcap_pkthdr  unsend_pkt_hdr;  
+//end
 static void proc_offline_pack(tc_event_timer_t *);
 static bool check_read_stop();
 static void send_packets_from_pcap(int);
@@ -569,7 +573,8 @@ check_read_stop()
 
     history_diff = timeval_diff(&first_pack_time, &last_pack_time); //pcap文件中 已发送第一个包 到 已发送的上一个包 的发送时间间隔
     cur_diff     = timeval_diff(&base_time, &cur_time);//本次回放初始化时间 到 这一轮发送循环开始 的时间间隔
-
+    
+    tc_log_debug2(LOG_DEBUG, 0, "history_diff: %lld, cur_diff: %lld", history_diff, cur_diff);
     if (clt_settings.accelerated_times > 1) {
         cur_diff = cur_diff * clt_settings.accelerated_times;
     }
@@ -614,8 +619,18 @@ send_packets_from_pcap(int first)
     gettimeofday(&cur_time, NULL);
 
     stop = check_read_stop();
+    !stop ? tc_log_debug0(LOG_DEBUG, 0, "Enter send packs loop"):0;
 
     while (!stop) {
+        if (unsend_pkt_data==NULL)
+        {
+            pkt_data = (u_char *) pcap_next(pcap, &pkt_hdr);
+        }
+        else
+        {
+            pkt_data = unsend_pkt_data;
+            pkt_hdr = unsend_pkt_hdr;
+        }
 
         pkt_data = (u_char *) pcap_next(pcap, &pkt_hdr);
         if (pkt_data != NULL) {
@@ -625,6 +640,19 @@ send_packets_from_pcap(int first)
                 ip_data = get_ip_data(pcap, pkt_data, pkt_hdr.len, &l2_len);
                 if ((size_t) l2_len >= ETHERNET_HDR_LEN) {
                     last_pack_time = pkt_hdr.ts;     //获取当前包的时间值
+                    stop = check_read_stop();
+                    if (stop)
+                    {
+                        tc_log_debug1(LOG_DEBUG, 0, "A pack can\'t be sent temporarily: %lld",timeval_diff(&first_pack_time,&last_pack_time));
+                        unsend_pkt_data = pkt_data;
+                        unsend_pkt_hdr = pkt_hdr;
+                        break;
+                    }else
+                    {
+                        tc_log_debug1(LOG_DEBUG, 0, "Send a clt pack: %lld",timeval_diff(&first_pack_time,&last_pack_time));
+                        unsend_pkt_data = NULL;
+                    }
+
                     if (ip_data != NULL) {
                         clt_settings.pcap_time = last_pack_time.tv_sec * 1000 +
                             last_pack_time.tv_usec / 1000; 
@@ -644,7 +672,7 @@ send_packets_from_pcap(int first)
                             /* set last valid packet time in pcap file */
                             last_v_pack_time = last_pack_time;
 
-                            stop = check_read_stop();   //根据当前包的时间值，判断下一个包是否可发
+                            // stop = check_read_stop();   //根据当前包的时间值，判断下一个包是否可发
                         }
                     }
 
