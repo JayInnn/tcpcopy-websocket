@@ -1784,7 +1784,7 @@ continue_diag(tc_sess_t *s, tc_tcph_t *tcp)
     ack_seq = ntohl(tcp->ack_seq);
 
     if (clt_settings.not_wait_resp) {
-        s->sm.candidate_rep_wait = 0;
+        // s->sm.candidate_rep_wait = 0;
         return PACK_CONTINUE;
     }
 
@@ -2046,12 +2046,12 @@ proc_clt_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             return PACK_STOP;
         }
 
-        if (!s->cur_pack.new_req_flag) {
-            status = is_continuous_pack(s, ip, tcp);
-            if (status != PACK_CONTINUE) {
-                return status;
-            }
-        }
+        // if (!s->cur_pack.new_req_flag) {
+        //     status = is_continuous_pack(s, ip, tcp);
+        //     if (status != PACK_CONTINUE) {
+        //         return status;
+        //     }
+        // }
 
         s->cur_pack.new_req_flag = 0;
         /*seq 乱序，直接PACK_STOP*/
@@ -2067,12 +2067,12 @@ proc_clt_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             return status;
         }
 
-        // if (!s->cur_pack.new_req_flag) {
-        //     status = is_continuous_pack(s, ip, tcp);
-        //     if (status != PACK_CONTINUE) {
-        //         return status;
-        //     }
-        // }
+        if (!s->cur_pack.new_req_flag) {
+            status = is_continuous_pack(s, ip, tcp);
+            if (status != PACK_CONTINUE) {
+                return status;
+            }
+        }
 
         tc_log_debug1(LOG_INFO, 0, "new req from clt:%u", ntohs(s->src_port));
     }
