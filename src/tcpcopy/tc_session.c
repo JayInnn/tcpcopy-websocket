@@ -719,7 +719,7 @@ send_faked_ack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, bool active)
     } else {
         f_tcp->seq = tcp->ack_seq;
     }
-    tc_log_debug2(LOG_DEBUG, 0, "EX: send faked ack --> port:%u, fake seq:%u, fake ack_seq:%u", ntohs(s->src_port), f_tcp->seq);
+    tc_log_debug3(LOG_DEBUG, 0, "EX: send faked ack --> port:%u, fake seq:%u, fake ack_seq:%u", ntohs(s->src_port), f_tcp->seq, f_tcp->ack_seq);
 
     s->frame = frame;
     s->cur_pack.cont_len = 0;
@@ -1792,10 +1792,11 @@ continue_diag(tc_sess_t *s, tc_tcph_t *tcp)
     if (s->req_con_ack_seq != s->req_con_cur_ack_seq) {
         s->cur_pack.new_req_flag = 1;
         tc_log_debug1(LOG_DEBUG, 0, "a new req,p:%u", ntohs(s->src_port));
+        tc_log_debug2(LOG_DEBUG, 0, "EX: session saved ack seq:%u, cur_clt_pak ack seq:%u", s->req_con_ack_seq, s->req_con_cur_ack_seq);
 
         if (after(s->cur_pack.seq, s->req_con_snd_seq)) {
             //TODO: 打印出停止的seq、ack
-            tc_log_debug4(LOG_DEBUG, 0, "stop req,p:%u, seq=%u,ack=%u,cur_pack.seq=%u", ntohs(s->src_port), seq, ack_seq,ntohs(s->cur_pack.seq));
+            tc_log_debug3(LOG_DEBUG, 0, "stop req,p:%u, seq=%u, ack=%u", ntohs(s->src_port), seq, ack_seq);
             return PACK_STOP;
         }
     }
