@@ -567,8 +567,8 @@ check_read_stop()
 {
     uint64_t diff, history_diff, cur_diff;
 
-    history_diff = timeval_diff(&first_pack_time, &last_pack_time);
-    cur_diff     = timeval_diff(&base_time, &cur_time);
+    history_diff = timeval_diff(&first_pack_time, &last_pack_time); //pcap文件中 已发送第一个包 到 已发送的上一个包 的发送时间间隔
+    cur_diff     = timeval_diff(&base_time, &cur_time);//本次回放初始化时间 到 这一轮发送循环开始 的时间间隔
 
     if (clt_settings.accelerated_times > 1) {
         cur_diff = cur_diff * clt_settings.accelerated_times;
@@ -624,13 +624,13 @@ send_packets_from_pcap(int first)
 
                 ip_data = get_ip_data(pcap, pkt_data, pkt_hdr.len, &l2_len);
                 if ((size_t) l2_len >= ETHERNET_HDR_LEN) {
-                    last_pack_time = pkt_hdr.ts;
+                    last_pack_time = pkt_hdr.ts;     //获取当前包的时间值
                     if (ip_data != NULL) {
                         clt_settings.pcap_time = last_pack_time.tv_sec * 1000 +
                             last_pack_time.tv_usec / 1000; 
 
                         ip_pack_len = pkt_hdr.len - l2_len;
-                        dispose_packet(ip_data, ip_pack_len, &p_valid_flag);
+                        dispose_packet(ip_data, ip_pack_len, &p_valid_flag);     //包处理：验证、发送...
                         if (p_valid_flag) {
 
                             if (!first) {
@@ -644,7 +644,7 @@ send_packets_from_pcap(int first)
                             /* set last valid packet time in pcap file */
                             last_v_pack_time = last_pack_time;
 
-                            stop = check_read_stop();
+                            stop = check_read_stop();   //根据当前包的时间值，判断下一个包是否可发
                         }
                     }
 
